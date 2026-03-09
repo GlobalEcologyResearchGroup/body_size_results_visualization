@@ -1,0 +1,58 @@
+<html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Body Size and Urban Tolerance</title><link rel=stylesheet href="https://fonts.googleapis.com/css?family=Roboto"><link rel=stylesheet type=text/css href=/static/semantic.min.css><style>body,
+        h1,
+        h2,
+        h3,
+        h4,
+        h5 {
+            font-family: "Roboto", Arial, sans-serif
+        }
+
+        .topcontent {
+            max-width: 900px;
+            margin: auto;
+            margin-top: 50px;
+        }
+
+        .bottomcontent {
+            max-width: 900px;
+            margin: auto;
+            margin-top: 50px;
+        }
+
+        /* Light/Dark Mode Styles */
+        :root {
+            --bg-color: #ffffff;
+            --text-color: #000000;
+            --segment-bg: #ffffff;
+            --table-bg: #ffffff;
+        }
+
+        [data-theme="dark"] {
+            --bg-color: #1b1c1d;
+            --text-color: #ffffff;
+            --segment-bg: #242526;
+            --table-bg: #242526;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        .ui.segment, .ui.table, .ui.menu {
+            background-color: var(--segment-bg) !important;
+            color: var(--text-color) !important;
+        }
+
+        .ui.header, .ui.table td, .ui.table th, .item {
+            color: var(--text-color) !important;
+        }
+
+        [data-theme="dark"] .ui.secondary.menu .item {
+            color: rgba(255, 255, 255, 0.9) !important;
+        }
+
+        [data-theme="dark"] .ui.table {
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }</style><link href=/body_size_results_visualization/static/css/app.2ff6d00e87c61168f3e237cf0c82477d.css rel=stylesheet></head><body><div class=topcontent><h1>Body Size and Urban Tolerance Across the Tree of Life</h1>This is a phylogenetic tree of families. You can learn more about each family and view our modeled results by clicking on the tree tip labels.</div><div id=app></div><script type=text/javascript src=/body_size_results_visualization/static/js/manifest.6ccb97fe82d41b0ce0ed.js></script><script type=text/javascript src=/body_size_results_visualization/static/js/vendor.cb7d4dc30ac7cbb00004.js></script><script type=text/javascript src=/body_size_results_visualization/static/js/app.c1ed280f70d964733463.js></script></body></html>
