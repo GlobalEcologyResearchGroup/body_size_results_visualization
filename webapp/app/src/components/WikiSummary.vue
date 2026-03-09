@@ -24,6 +24,9 @@ export default {
   watch: {
     selected () {
       this.loading = true
+      this.$asyncComputed.imageUrl.update()
+      this.$asyncComputed.info.update()
+      this.$asyncComputed.text.update()
     },
     imageUrl () {
       console.log('image watch called')
@@ -37,12 +40,18 @@ export default {
       }
     }
   },
+  data () {
+    return {
+      loading: false
+    }
+  },
   asyncComputed: {
     resultsImage () {
       var img = 'static/results/' + this.selected + '.png'
       return img
     },
     imageUrl () {
+      if (!this.selected) return Promise.resolve('')
       return wikiApi.page(this.selected).then(x => {
         return x.mainImage()
       })
@@ -53,7 +62,7 @@ export default {
       })
     },
     info () {
-      this.info = {}
+      if (!this.selected) return Promise.resolve({})
       return wikiApi.page(this.selected).then(x => x.info())
         .catch(reason => {
           console.log('page info failed' + reason)
@@ -61,6 +70,10 @@ export default {
     },
     text () {
       var vm = this
+      if (!this.selected) {
+        vm.loading = false
+        return Promise.resolve('')
+      }
       return wikiApi.page(this.selected).then(x => {
         vm.loading = false
         return x.summary()

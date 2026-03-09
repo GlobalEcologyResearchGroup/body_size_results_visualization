@@ -12,6 +12,12 @@ export default {
   components: {
     PhyloTree,
     MyMenu
+  },
+  mounted () {
+    if (!localStorage.getItem('tutorial_completed')) {
+      window.introJS().start()
+      localStorage.setItem('tutorial_completed', 'true')
+    }
   }
 }
 </script>

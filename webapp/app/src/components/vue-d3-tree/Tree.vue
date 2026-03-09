@@ -207,9 +207,9 @@ export default {
       const text = allNodes.append('text')
         .attr('dy', '.35em')
         .text(d => {
-          if (!d.data[this.nodeText].match(/ott/)) { // removes labels that are non-order level subclades
-            return d.data[this.nodeText]
-          }
+          const name = d.data[this.nodeText]
+          if (hasChildren(d)) return ''
+          return name.length > 15 ? name.substring(0, 15) + '...' : name
         })
         .on('click', d => {
           currentSelected = (currentSelected === d) ? null : d
@@ -218,11 +218,27 @@ export default {
           this.redraw()
           this.$emit('clicked', {element: d, data: d.data})
         })
-        .on('mouseover', this.mouseovered(true))
-        .on('mouseout', this.mouseovered(false))
-        .attr('fill', d => {
+        .on('mouseover', (d) => {
+          this.mouseovered(true)(d)
+          this.$emit('hover', {active: true, data: d.data, event: d3.event})
+        })
+        .on('mousemove', (d) => {
+          this.$emit('hover', {active: true, data: d.data, event: d3.event})
+        })
+        .on('mouseout', (d) => {
+          this.mouseovered(false)(d)
+          this.$emit('hover', {active: false})
+        })
+
+      // Tip circles instead of rectangles
+      allNodes.append('circle')
+        .attr('r', d => hasChildren(d) ? 0 : 3)
+        .attr('fill', 'none')
+        .attr('stroke', d => {
           return d3[this.ramp](d.data.scaled_estimate)
         })
+        .attr('stroke-width', 1)
+        .attr('opacity', d => hasChildren(d) ? 0 : 1)
 
       // branch coloring
       updateLinks.each(function (d) { d.linkExtensionNode = this })
@@ -276,7 +292,169 @@ export default {
                   .attr('opacity', 0).remove())
       exitingNodes.select('circle').attr('r', 1e6)
 
+      allNodes.selectAll('image').remove()
+      allNodes.selectAll('.group-arc').remove()
+
+      // const internalNodes = allNodes.filter(d => hasChildren(d) && d.depth > 0)
+      
+      // 1. Identify ALL taxonomic groups (including singletons) in circular order
       const leaves = root.leaves()
+      const allGroups = []
+      let currentGroup = []
+      let lastOrder = null
+
+      leaves.forEach((leaf, idx) => {
+        const seenData = this.$parent.seen[leaf.data[this.nodeText]]
+        const order = seenData ? seenData.Order : 'Unknown'
+
+        if (order === lastOrder) {
+          currentGroup.push(leaf)
+        } else {
+          if (currentGroup.length > 0) {
+            allGroups.push({ order: lastOrder, leaves: currentGroup })
+          }
+          currentGroup = [leaf]
+          lastOrder = order
+        }
+
+        if (idx === leaves.length - 1) {
+          allGroups.push({ order: lastOrder, leaves: currentGroup })
+        }
+      })
+
+      // 2. Draw connected arcs and pictograms once for all groups
+      allGroups.forEach((groupData, idx) => {
+        const { order, leaves: groupLeaves } = groupData
+        const angles = groupLeaves.map(l => l.x)
+        
+        // Calculate mid-points between groups for seamless ring
+        let minAngle, maxAngle
+        
+        // Previous neighbor
+        const prevGroup = allGroups[(idx - 1 + allGroups.length) % allGroups.length]
+        const prevMax = Math.max(...prevGroup.leaves.map(l => l.x))
+        if (idx === 0 && prevMax > Math.min(...angles)) {
+          minAngle = (prevMax - 360 + Math.min(...angles)) / 2
+        } else {
+          minAngle = (prevMax + Math.min(...angles)) / 2
+        }
+
+        // Next neighbor
+        const nextGroup = allGroups[(idx + 1) % allGroups.length]
+        const nextMin = Math.min(...nextGroup.leaves.map(l => l.x))
+        if (idx === allGroups.length - 1 && nextMin < Math.max(...angles)) {
+          maxAngle = (Math.max(...angles) + 360 + nextMin) / 2
+        } else {
+          maxAngle = (Math.max(...angles) + nextMin) / 2
+        }
+
+        const midAngle = (Math.min(...angles) + Math.max(...angles)) / 2
+        const radius = groupLeaves[0].y + 80
+
+        // Draw arc
+        const arcGenerator = d3.arc()
+          .innerRadius(radius - 4)
+          .outerRadius(radius + 4)
+          .startAngle(minAngle * Math.PI / 180)
+          .endAngle(maxAngle * Math.PI / 180)
+
+        const avgEffect = d3.mean(groupLeaves, l => l.data.scaled_estimate)
+        const arcColor = d3[this.ramp](avgEffect)
+
+        this.internaldata.g.append('path')
+          .attr('class', 'group-arc')
+          .attr('d', arcGenerator())
+          .attr('fill', arcColor)
+          .attr('stroke', '#333')
+          .attr('stroke-width', 0.5)
+          .attr('opacity', 0.8)
+          .style('cursor', 'pointer')
+          .on('click', () => {
+            this.$emit('clicked', { data: { name: order } })
+          })
+          .on('mouseover', () => {
+            this.$emit('hover', {
+              active: true, 
+              data: { name: order, isGroup: true, taxonomy: `Group: ${order} (${groupLeaves.length} families)` }, 
+              event: d3.event
+            })
+          })
+          .on('mouseout', () => {
+            this.$emit('hover', { active: false })
+          })
+
+        // Add pictogram and text for groups >= 2
+        if (groupLeaves.length >= 2 && order !== 'Unknown') {
+          // Determine size based on angular distance to neighbors
+          const d1 = Math.abs(midAngle - ((Math.min(...prevGroup.leaves.map(l => l.x)) + Math.max(...prevGroup.leaves.map(l => l.x))) / 2))
+          const d2 = Math.abs(midAngle - ((Math.min(...nextGroup.leaves.map(l => l.x)) + Math.max(...nextGroup.leaves.map(l => l.x))) / 2))
+          const minAngularDist = Math.min(d1 > 180 ? 360 - d1 : d1, d2 > 180 ? 360 - d2 : d2)
+
+          let innerTextOffset = -30
+          let outerTextOffset = 20
+          const isSmall = minAngularDist < 3
+          const imgSize = isSmall ? 30 : 50
+          const fontSize = isSmall ? '7px' : '10px'
+          let textOffset = isSmall ? outerTextOffset : innerTextOffset
+
+          if (['Saxifragales', 'Perciformes'].includes(order)) {
+            textOffset = innerTextOffset
+          } else if (order === 'Tetraodontiformes') {
+            textOffset = outerTextOffset
+          }
+
+          const midRad = (midAngle - 90) * Math.PI / 180
+          const iconX = (radius + 45) * Math.cos(midRad)
+          const iconY = (radius + 45) * Math.sin(midRad)
+
+          const group = this.internaldata.g.append('g').attr('class', 'group-arc')
+          group.append('image')
+            .attr('width', imgSize)
+            .attr('height', imgSize)
+            .attr('xlink:href', `static/Vectors/${order}.svg`)
+            .attr('x', iconX - (imgSize / 2))
+            .attr('y', iconY - (imgSize / 2))
+            .style('cursor', 'pointer')
+            .on('click', () => {
+              this.$emit('clicked', { data: { name: order } })
+            })
+            .on('mouseover', () => {
+              this.$emit('hover', {
+                active: true,
+                data: { name: order, isGroup: true, taxonomy: `Group: ${order} (${groupLeaves.length} families)` },
+                event: d3.event
+              })
+            })
+            .on('mouseout', () => {
+              this.$emit('hover', { active: false })
+            })
+            .on('error', function () { d3.select(this).remove() })
+
+          // Only show group text when group has more than 3 taxons
+          if (groupLeaves.length > 2) {
+            group.append('text')
+              .attr('x', iconX)
+              .attr('y', iconY)
+              .attr('text-anchor', 'middle')
+              .attr('font-size', fontSize)
+              .attr('font-weight', 'bold')
+              .attr('fill', 'var(--text-color)')
+              .attr('transform', () => {
+                let rotation = midAngle
+                let translateY = textOffset
+                if (rotation > 90 && rotation < 270) {
+                  rotation -= 180
+                  translateY = textOffset
+                } else {
+                  translateY = -textOffset
+                }
+                return `rotate(${rotation}, ${iconX}, ${iconY}) translate(0, ${translateY})`
+              })
+              .text(order)
+          }
+        }
+      })
+
       const extremeNodes = text.filter(d => leaves.indexOf(d) !== -1).nodes()
       const last = Math.max(...extremeNodes.map(node => node.getComputedTextLength())) + 6
       const first = text.node().getComputedTextLength() + 6
@@ -315,6 +493,7 @@ export default {
         this.clean()
         return
       }
+      console.log('Tree Data:', data)
       const root = d3.hierarchy(data)
         .sum(x => x.children ? 0 : 1)
         .sort((a, b) => {
